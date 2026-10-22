@@ -358,7 +358,7 @@
           '<span style="font-size:15px;font-weight:600;' + (x.done ? 'color:var(--muted);text-decoration:line-through' : '') + '">' + esc(x.task) + '</span>' +
           '<span class="tip">' + esc(x.done ? 'Done' : (x.vehicle === 'Both' ? 'Both vehicles' : '') + (x.notes ? (x.vehicle === 'Both' ? ' · ' : '') + x.notes : '')) + '</span></span></button>').join('')
           : '<div class="note" style="padding:14px 16px">Nothing open.</div>') + '</div>' +
-        '<div class="row"><input id="newTask" placeholder="Add a task, e.g. book alignment" style="flex-grow:1;height:48px;border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--text);padding:0 14px;font-size:15px;outline:none">' +
+        '<div class="row"><input id="newTask" placeholder="Add a task, e.g. book alignment" style="flex-grow:1;height:48px;border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--text);padding:0 14px;font-size:16px;outline:none">' +
           '<button class="iconbtn" id="addTask" aria-label="Add task" style="background:var(--blue);color:#000">' + svg(I.plus, { w: 2.4 }) + '</button></div>' +
         '<div class="section" style="color:var(--amber)">Ask at the shop</div>' +
         '<div class="card" style="display:flex;flex-direction:column">' + (shop.length ? shop.map(x =>
@@ -391,7 +391,7 @@
           '<div class="field"><label for="gal">Gallons</label><input id="gal" class="' + bad('gallons') + '" inputmode="decimal" placeholder="0.000" value="' + esc(e.gallons != null ? e.gallons : '') + '"></div>' +
           '<div class="field"><label for="tot">Total $</label><input id="tot" class="' + bad('total') + '" inputmode="decimal" placeholder="0.00" value="' + esc(e.total != null ? e.total : '') + '"></div></div>' +
         '<div class="between" style="padding:0 6px;font-size:14px;color:var(--muted)"><span id="ppg">Price / gal calculates automatically</span>' +
-          '<label style="display:flex;align-items:center;gap:6px">Date <input id="date" type="date" value="' + esc(e.date || today()) + '" style="background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px 8px;color:var(--text);font-size:14px"></label></div>' +
+          '<label style="display:flex;align-items:center;gap:6px">Date <input id="date" type="date" value="' + esc(e.date || today()) + '" style="background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px 8px;color:var(--text);font-size:16px"></label></div>' +
         '<div class="seg" role="group" aria-label="Fill type">' + ['Full', 'Partial', 'Missed'].map(t =>
           '<button data-fill="' + t + '" aria-pressed="' + ((e.fillType || 'Full') === t) + '">' + (t === 'Full' ? 'Full tank' : t === 'Missed' ? 'Missed one' : 'Partial') + '</button>').join('') + '</div>' +
         photoRow(e, 'var(--amber)') +

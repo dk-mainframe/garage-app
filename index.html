@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Garage</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -21,7 +21,10 @@
     --amber: #F5A524; --amber-ink: #3B2A06; --blue: #7DB3FF; --red: #FF8A7A;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  /* The app never slides sideways, bounces, or zooms; long screens still scroll up and down. */
+  html, body { margin: 0; background: var(--bg); color: var(--text); width: 100%; overflow-x: hidden; overscroll-behavior: none; }
+  body { touch-action: pan-y; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  .chips { touch-action: pan-x; }
   body { font-family: 'Sora', -apple-system, BlinkMacSystemFont, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
   button, input { font: inherit; color: inherit; }
   button { cursor: pointer; }
@@ -96,7 +99,7 @@
   .group .gi { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 52px; border-bottom: 1px solid #2E2E33; }
   .group .gi:last-child { border-bottom: 0; }
   .group .gi > span:first-child { font-size: 15px; color: var(--soft); }
-  .group input, .group select, .group textarea { background: #000; border: 1px solid var(--line); border-radius: 10px; color: var(--text); font-size: 15px; padding: 8px 10px; outline: none; }
+  .group input, .group select, .group textarea { background: #000; border: 1px solid var(--line); border-radius: 10px; color: var(--text); font-size: 16px; padding: 8px 10px; outline: none; }
   .group input:focus, .group select:focus, .group textarea:focus { border-color: var(--amber); }
   .group input.n { width: 110px; text-align: right; }
   .group textarea { width: 100%; resize: vertical; min-height: 64px; font-family: inherit; margin: 10px 0; }
@@ -136,6 +139,10 @@
 </head>
 <body>
 <main id="app"><div class="spin" role="status" aria-label="Loading"></div></main>
+<script>
+  // iPhone ignores some zoom settings, so block pinch zoom directly (touch-action handles double-tap).
+  ['gesturestart', 'gesturechange'].forEach(t => document.addEventListener(t, e => e.preventDefault()));
+</script>
 <script src="checks.js"></script>
 <script src="media.js"></script>
 <script src="stats.js"></script>
