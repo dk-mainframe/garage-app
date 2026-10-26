@@ -88,7 +88,7 @@
     back: '<path d="M15 18l-6-6 6-6"></path>',
     arrow: '<path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path>',
     chev: '<path d="M9 6l6 6-6 6"></path>',
-    gear: '<circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path>',
+    gear: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>',
     pump: '<path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16"></path><path d="M3 21h13"></path><path d="M7 7h5v4H7z"></path><path d="M15 9h2a2 2 0 0 1 2 2v6a1.5 1.5 0 0 0 3 0V8l-3-3"></path>',
     wrench: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"></path>',
     scan: '<path d="M3 8V6a3 3 0 0 1 3-3h2"></path><path d="M16 3h2a3 3 0 0 1 3 3v2"></path><path d="M21 16v2a3 3 0 0 1-3 3h-2"></path><path d="M8 21H6a3 3 0 0 1-3-3v-2"></path><path d="M8 9h8"></path><path d="M8 12h8"></path><path d="M8 15h5"></path>',
@@ -292,7 +292,8 @@
       return '<div class="screen">' +
         '<div class="between"><span class="eyebrow" style="padding-left:4px;display:flex;align-items:center;gap:10px">Garage' +
           (state.refreshing ? '<span class="updating" role="status">Updating…</span>' : '') + '</span>' +
-          '<button class="iconbtn" aria-label="Settings" data-go="settings">' + svg(I.gear, { w: 1.8 }) + '</button></div>' +
+          '<span class="row" style="gap:10px"><button class="iconbtn" aria-label="History" data-go="history">' + svg(I.hist, { w: 1.8 }) + '</button>' +
+          '<button class="iconbtn" aria-label="Settings" data-go="settings">' + svg(I.gear, { w: 1.8 }) + '</button></span></div>' +
         switcher(d, v) +
         '<button class="card between" data-go="stats" aria-label="Stats and trends" style="padding:14px 16px;border:0;width:100%;text-align:left;color:inherit"><span style="display:flex;flex-direction:column;gap:8px"><span class="eyebrow" style="font-size:11px">Odometer</span>' +
           '<span class="digits" aria-label="' + fmt(v.odometer || 0) + ' miles">' + digits.map((c, i) => '<span' + (i === digits.length - 1 ? ' class="lit"' : '') + '>' + c + '</span>').join('') +
@@ -314,7 +315,7 @@
               : '<div class="line"><span>All caught up</span><span></span></div>') + '</div></div>' +
           '<button class="link" data-go="all" style="border-top:1px solid var(--line);margin:0 -16px;width:calc(100% + 32px)">' +
           (v.attention.length ? 'See all ' + v.attention.length : 'See all services') + svg(I.chev, { size: 16, w: 2 }) + '</button></div>' +
-        quickRow(v) + pendingLine() +
+        todoLine(v) + pendingLine() +
         '</div>';
     },
 
