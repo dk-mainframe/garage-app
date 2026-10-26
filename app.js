@@ -100,6 +100,8 @@
     spark: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"></path>',
     list: '<rect x="4" y="4" width="16" height="16" rx="4"></rect><path d="M8.5 12l2.5 2.5 4.5-5"></path>',
     tire: '<circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="3.5"></circle><path d="M12 3v5.5M12 15.5V21M3 12h5.5M15.5 12H21"></path>',
+    hist: '<path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v4h4"></path><path d="M12 7.5V12l3 2"></path>',
+    trash: '<path d="M4 7h16"></path><path d="M10 11v6M14 11v6"></path><path d="M6 7l1 13h10l1-13"></path><path d="M9 7V4h6v3"></path>',
     cloud: '<path d="M7 18h10a4 4 0 0 0 .5-7.97A6 6 0 0 0 6 9.5 4.25 4.25 0 0 0 7 18z"></path><path d="M3 3l18 18"></path>',
     q: '<circle cx="12" cy="12" r="9"></circle><path d="M9.5 9.5a2.5 2.5 0 0 1 4.8 1c0 1.7-2.3 2-2.3 3.5"></path><path d="M12 17h.01"></path>',
     car: '<path d="M5 16H3v-3.5L5 9h9l3.5 3.5H20a1 1 0 0 1 1 1V16h-2"></path><path d="M9 16h6"></path><circle cx="7" cy="16" r="2"></circle><circle cx="17" cy="16" r="2"></circle>',
@@ -116,13 +118,13 @@
   /* Every request gets a deadline, so a button never just sits on "Saving…". Reading photos or voice gets longer. */
   const SLOW = { scanFuel: 1, scanService: 1, voice: 1 };
   /** Green check banner: stays until tapped, so a save is never in doubt. */
-  function confirmBanner(title, sub) {
+  function confirmBanner(title, sub, action) {
     const now = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-    banner('ok', title, sub || 'Synced to your Sheet · ' + now);
+    banner('ok', title, sub || 'Synced to your Sheet · ' + now, action ? action.fn : null, action ? action.label : null);
   }
-  function failBanner(msg, retry) { banner('fail', 'Didn’t go through', msg, retry); }
+  function failBanner(msg, retry) { banner('fail', 'Didn’t go through', msg, retry, 'Try again'); }
   let shown = null; // the banner stays at the top of every screen until tapped
-  function banner(kind, title, sub, retry) { shown = { kind: kind, title: title, sub: sub, retry: retry }; placeBanner(); }
+  function banner(kind, title, sub, retry, label) { shown = { kind: kind, title: title, sub: sub, retry: retry, label: label || 'Try again' }; placeBanner(); }
   function placeBanner() {
     document.querySelectorAll('.banner').forEach(b => b.remove());
     const host = $app.querySelector('.screen');
@@ -131,7 +133,7 @@
     b.className = 'banner ' + x.kind; b.setAttribute('role', x.kind === 'ok' ? 'status' : 'alert');
     b.innerHTML = '<span class="bicon">' + svg(x.kind === 'ok' ? I.check : I.alert, { size: 20, stroke: '#000', w: 2.6 }) + '</span>' +
       '<span class="grow"><b>' + esc(x.title) + '</b><span>' + esc(x.sub) + '</span></span>' +
-      (x.retry ? '<button class="mini" data-retry style="border-color:var(--red);color:var(--red)">Try again</button>' : '') +
+      (x.retry ? '<button class="mini" data-retry style="' + (x.kind === 'ok' ? 'border-color:#5BD27A;color:#5BD27A' : 'border-color:var(--red);color:var(--red)') + '">' + esc(x.label) + '</button>' : '') +
       '<button class="bclose" aria-label="Dismiss">' + svg('<path d="M6 6l12 12M18 6L6 18"></path>', { size: 18, w: 2 }) + '</button>';
     b.addEventListener('click', e => { const rt = e.target.closest('[data-retry]'); shown = null; b.remove(); if (rt && x.retry) x.retry(); });
     host.insertBefore(b, host.firstChild);
@@ -181,7 +183,7 @@
   }
   function adopt(home) {
     if (!home || !home.vehicles) return;
-    state.data = home; state.stats = null;
+    state.data = home; state.stats = null; state.hist = null;
     if (!home.vehicles.some(v => v.name === state.vehicle)) state.vehicle = home.vehicles[0].name;
   }
 
@@ -190,7 +192,25 @@
   function go(name) {
     if (name === 'todo' && current !== 'todo') state.todoFrom = current === 'home' ? 'home' : 'all';
     current = name; render(); window.scrollTo(0, 0);
+    syncHistory();
   }
+  /* Android's Back button (and a browser's back swipe) acts like the app's back arrow instead of closing the app.
+     While you're off the Home screen there's one extra history step; pressing Back uses it and taps the arrow. */
+  let stepped = false, ignorePop = false;
+  function syncHistory() {
+    try {
+      if (current !== 'home' && !stepped) { history.pushState({ garage: 1 }, ''); stepped = true; }
+      else if (current === 'home' && stepped) { stepped = false; ignorePop = true; history.back(); }
+    } catch (e) { /* history not available */ }
+  }
+  window.addEventListener('popstate', () => {
+    if (ignorePop) { ignorePop = false; return; }
+    stepped = false;
+    if (current === 'home') return;
+    const b = $app.querySelector('[data-back]');
+    syncHistory(); // keep the step until we actually leave
+    if (b) b.click(); else go('home');
+  });
   /* Back (arrow or swipe). On a form with something entered, asks first so a mis-tap doesn't lose it. */
   const dirty = {
     manual: () => { const e = state.entry; return !!e && (e.odometer != null || e.gallons != null || e.total != null || !!e.photo || (e.photoUrls || []).length > 0); },
@@ -198,7 +218,8 @@
     tires: () => { const f = state.tireForm; return !!f && !!(f.dot || f.cost || f.shop); },
     scanFuel: () => !!state.scan && !!(state.scan.receipt || state.scan.dash),
     scanService: () => !!state.scan && (state.scan.pages || []).length > 0,
-    addVehicle: () => { const n = state.newCar; return !!n && !!(n.name || n.make || n.model); }
+    addVehicle: () => { const n = state.newCar; return !!n && !!(n.name || n.make || n.model); },
+    entry: () => { const x = state.histEdit; return !!x && JSON.stringify(x.form) !== x.orig; }
   };
   function back(to) {
     if (dirty[current] && dirty[current]()) {
@@ -209,7 +230,9 @@
       if (current === 'tires') state.tireForm = null;
       if (/^scan/.test(current)) state.scan = null;
       if (current === 'addVehicle') state.newCar = null;
+      if (current === 'entry') state.histEdit = null;
     }
+    if ((current === 'manual' || current === 'serviceManual') && !/^scan/.test(to)) state.scan = null;
     go(to);
   }
   // Swipe in from the left edge to go back, like other iPhone apps (the Home Screen app doesn't get Safari's gesture).
@@ -291,7 +314,7 @@
               : '<div class="line"><span>All caught up</span><span></span></div>') + '</div></div>' +
           '<button class="link" data-go="all" style="border-top:1px solid var(--line);margin:0 -16px;width:calc(100% + 32px)">' +
           (v.attention.length ? 'See all ' + v.attention.length : 'See all services') + svg(I.chev, { size: 16, w: 2 }) + '</button></div>' +
-        todoLine(v) + pendingLine() +
+        quickRow(v) + pendingLine() +
         '</div>';
     },
 
@@ -314,7 +337,7 @@
       const chip = n => { const on = f.picked.indexOf(n) >= 0;
         return '<button class="svc-chip" data-pick="' + esc(n) + '" aria-pressed="' + on + '" style="height:40px;padding:0 14px;border-radius:20px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;' +
           (on ? 'border:0;background:var(--blue);color:#000' : 'border:1px solid var(--line);background:transparent;color:var(--soft)') + '">' + (on ? svg(I.check, { size: 16, w: 2.6 }) : '') + esc(n) + '</button>'; };
-      return '<div class="screen">' + header('service', v) + '<h1 style="padding:0 4px">' + (f.fromAI ? 'Look right?' : 'Log service') + '</h1>' +
+      return '<div class="screen">' + header(f.fromScan && state.scan ? 'scanService' : 'service', v) + '<h1 style="padding:0 4px">' + (f.fromAI ? 'Look right?' : 'Log service') + '</h1>' +
         (f.fromAI ? '<div class="note">' + esc(f.fromAI) + '</div>' : '') +
         '<div class="group"><label class="gi"><span>Date</span><input id="sDate" type="date" value="' + esc(f.date) + '"></label>' +
           '<label class="gi"><span>Odometer</span><input class="n" id="sOdo" inputmode="numeric" value="' + esc(f.odometer) + '"></label></div>' +
@@ -398,7 +421,7 @@
 
     manual() {
       const v = vehicle(), e = state.entry || {}, bad = f => state.warnings.some(w => w.field === f) ? ' bad' : '';
-      return '<div class="screen">' + header('fuel', v) + '<h1 style="padding:0 4px">' + (e.fromAI ? 'Look right?' : 'Enter fill-up') + '</h1>' +
+      return '<div class="screen">' + header(e.fromScan && state.scan ? 'scanFuel' : 'fuel', v) + '<h1 style="padding:0 4px">' + (e.fromAI ? 'Look right?' : 'Enter fill-up') + '</h1>' +
         (e.fromAI ? '<div class="note">' + esc(e.fromAI) + '</div>' : '') +
         state.warnings.map(w => '<div class="warn">' + svg(I.alert, { stroke: 'var(--red)', w: 2 }) + '<div><b>' + esc(w.title) + '</b><span>' + esc(w.text) + '</span></div></div>').join('') +
         '<div class="field"><label for="odo">Odometer</label><input id="odo" class="' + bad('odometer') + '" inputmode="numeric" placeholder="Last: ' + fmt(v.lastFillOdo || v.odometer || 0) + '" value="' + esc(e.odometer != null ? e.odometer : '') + '"></div>' +
@@ -568,7 +591,8 @@
       const ai = state.data.settings.geminiReady;
       s.pages = s.pages || [];
       return '<div class="screen">' + header('service', v) + '<h1 style="padding:0 4px">Scan invoice</h1>' +
-        '<div class="sub" style="padding:0 4px">' + (ai ? 'Up to 3 pages. Services, prices, and the total get filled in for you to check.' : 'Up to 3 pages, saved to your Garage Log. You’ll pick the services next.') + '</div>' +
+        '<div class="sub" style="padding:0 4px">' + (ai ? 'Up to 3 pages: take a photo, pick one, or choose a PDF. Services, prices, and the total get filled in for you to check.' : 'Up to 3 pages, saved to your Garage Log. You’ll pick the services next.') + '</div>' +
+        '<div class="note">Tip: for the sharpest read, scan the invoice in the Notes or Files app (Scan Documents), then tap a page here and choose that PDF.</div>' +
         '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">' +
           s.pages.map((p, i) => shotTile('page' + i, 'Page ' + (i + 1), p, 'var(--blue)')).join('') +
           (s.pages.length < 3 ? shotTile('page' + s.pages.length, s.pages.length ? 'Add page' : 'Page 1', null, 'var(--blue)', s.pages.length ? 'Optional' : '') : '') + '</div>' +
@@ -611,6 +635,50 @@
         '<div id="statsBody">' + (d ? GarageStats.render(d, range) : '<div class="spin" style="margin:20vh auto" role="status" aria-label="Loading"></div>') + '</div></div>';
     },
 
+    history() {
+      const v = vehicle(), h = (state.hist || {})[v.name], filter = state.histFilter || 'all';
+      const head = '<div class="screen">' + header('home', v) + '<h1 style="padding:0 4px">History</h1>' +
+        '<div class="seg" role="group" aria-label="Show">' + [['all', 'All'], ['fuel', 'Fuel'], ['service', 'Service']].map(x =>
+          '<button data-hf="' + x[0] + '" aria-pressed="' + (filter === x[0]) + '">' + x[1] + '</button>').join('') + '</div>';
+      if (!h) return head + '<div class="spin" style="margin:20vh auto" role="status" aria-label="Loading"></div></div>';
+      const list = h.entries.filter(e => filter === 'all' || e.kind === filter), limit = state.histLimit || 60;
+      if (!list.length) return head + '<div class="note center" style="padding-top:12vh">Nothing logged yet.</div></div>';
+      let out = '', month = '';
+      list.slice(0, limit).forEach(e => {
+        const m = monthName(e.date);
+        if (m !== month) { out += (month ? '</div>' : '') + '<div class="section" style="color:var(--muted)">' + esc(m) + '</div><div class="card" style="display:flex;flex-direction:column">'; month = m; }
+        out += historyRow(e);
+      });
+      out += '</div>';
+      return head + out + (list.length > limit ? '<button class="secondary" id="more">Show ' + Math.min(60, list.length - limit) + ' more</button>' : '') +
+        '<div class="note center">' + list.length + ' entr' + (list.length === 1 ? 'y' : 'ies') + '. Tap one to see details, fix it, or delete it.</div></div>';
+    },
+
+    entry() {
+      const v = vehicle(), x = state.histEdit, e = x.entry, f = x.form, fuel = e.kind === 'fuel';
+      const color = fuel ? 'var(--amber)' : 'var(--blue)';
+      const src = /^App/.test(e.source) ? 'Logged in the app' : e.source ? 'From ' + e.source : '';
+      return '<div class="screen">' + header('history', v) + '<h1 style="padding:0 4px">' + (fuel ? 'Fill-up' : 'Service visit') + '</h1>' +
+        '<div class="note">' + esc([longDate(e.date), src].filter(Boolean).join(' · ')) + '</div>' +
+        '<div class="group"><label class="gi"><span>Date</span><input id="eDate" type="date" value="' + esc(f.date) + '"></label>' +
+          '<label class="gi"><span>Odometer</span><input class="n" id="eOdo" inputmode="numeric" value="' + esc(f.odometer) + '"></label>' +
+          (fuel ? '<label class="gi"><span>Gallons</span><input class="n" id="eGal" inputmode="decimal" value="' + esc(f.gallons) + '"></label>' +
+            '<label class="gi"><span>Total $</span><input class="n" id="eTot" inputmode="decimal" value="' + esc(f.total) + '"></label>'
+          : '<label class="gi"><span>Total paid</span><input class="n" id="eCost" inputmode="decimal" placeholder="$" value="' + esc(f.cost) + '"></label>' +
+            '<label class="gi"><span>Shop</span><input id="eShop" style="width:60%" placeholder="Optional" value="' + esc(f.shop) + '"></label>') + '</div>' +
+        (fuel ? '<div class="seg" role="group" aria-label="Fill type">' + ['Full', 'Partial', 'Missed'].map(t =>
+            '<button data-eft="' + t + '" aria-pressed="' + (f.fillType === t) + '">' + (t === 'Full' ? 'Full tank' : t === 'Missed' ? 'Missed one' : 'Partial') + '</button>').join('') + '</div>' +
+            '<div class="between" style="padding:0 6px;font-size:13px;color:var(--muted)"><span id="ePpg">' + (num(f.gallons) && num(f.total) != null ? '$' + (num(f.total) / num(f.gallons)).toFixed(3) + ' / gal' : '') + '</span><span>' + (e.mpg != null ? e.mpg.toFixed(1) + ' mpg' : 'No MPG for this one') + '</span></div>'
+          : '<div class="section" style="color:var(--muted)">Work done</div><div class="group"><textarea id="eSvc" rows="3" aria-label="Work done, separated by commas">' + esc(f.services) + '</textarea></div>' +
+            '<div class="note">Separate items with commas. Tracked services (like Oil &amp; Filter) keep their reminders in step automatically.</div>') +
+        '<div class="group"><label class="gi" style="align-items:flex-start;padding-top:10px"><span>Notes</span><textarea id="eNotes" rows="2" style="width:62%;margin:0 0 10px">' + esc(f.notes) + '</textarea></label></div>' +
+        (e.photos.length ? '<div class="row" style="flex-wrap:wrap;gap:8px;padding:0 4px">' + e.photos.map((u, i) =>
+          '<a class="mini" href="' + esc(u) + '" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;color:' + color + ';border-color:' + color + ';text-decoration:none">View photo ' + (e.photos.length > 1 ? i + 1 : '') + '</a>').join('') + '</div>' : '') +
+        '<div class="grow"></div>' +
+        '<button class="primary" id="eSave"' + (fuel ? '' : ' style="background:var(--blue);box-shadow:0 10px 36px rgba(125,179,255,.32)"') + '>Save changes</button>' +
+        '<button class="secondary" id="eDel" style="color:var(--red);display:flex;align-items:center;justify-content:center;gap:8px">' + svg(I.trash, { size: 18, stroke: 'var(--red)' }) + 'Delete this ' + (fuel ? 'fill-up' : 'visit') + '</button></div>';
+    },
+
     error() {
       return '<div class="screen"><div class="grow"></div><div class="warn">' + svg(I.alert, { stroke: 'var(--red)', w: 2 }) + '<div><b>Couldn’t reach your Sheet</b><span>' + esc(state.error) +
         '</span></div></div><button class="primary" id="retry">Try again</button><button class="secondary" data-go="setup">Check connection settings</button><div class="grow"></div></div>';
@@ -621,7 +689,10 @@
   function shotTile(id, label, photo, color, hint) {
     return '<button data-shot="' + id + '" aria-label="' + esc(label) + (photo ? ', retake' : ', take photo') + '" style="aspect-ratio:3/4;border-radius:20px;padding:0;overflow:hidden;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;' +
       (photo ? 'border:0;background:#000' : 'border:1.5px dashed #4A4A52;background:var(--card);color:var(--soft)') + '">' +
-      (photo ? '<img src="' + photo.preview + '" alt="" style="width:100%;height:100%;object-fit:cover">' +
+      (photo && !photo.preview ? '<span style="display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--soft);padding:12px;text-align:center">' + svg(I.list, { size: 34, stroke: color }) +
+          '<span style="font-size:14px;font-weight:600">PDF</span><span style="font-size:11px;color:var(--muted);word-break:break-all">' + esc(photo.name || '') + '</span></span>' +
+          '<span style="position:absolute;left:8px;bottom:8px;background:rgba(0,0,0,.7);border-radius:10px;padding:4px 8px;font-size:12px;font-weight:600;color:#fff">' + esc(label) + ' · Replace</span>'
+        : photo ? '<img src="' + photo.preview + '" alt="" style="width:100%;height:100%;object-fit:cover">' +
         '<span style="position:absolute;left:8px;bottom:8px;background:rgba(0,0,0,.7);border-radius:10px;padding:4px 8px;font-size:12px;font-weight:600;color:#fff">' + esc(label) + ' · Retake</span>'
         : svg(I.scan, { size: 34, stroke: color }) + '<span style="font-size:15px;font-weight:600">' + esc(label) + '</span>' +
           (hint ? '<span style="font-size:12px;color:var(--muted)">' + esc(hint) + '</span>' : '')) + '</button>';
@@ -741,11 +812,38 @@
     if (r) r.addEventListener('click', () => { obj().photo = null; render(); });
   }
 
+  const monthName = iso => { const [y, m] = String(iso).split('-').map(Number); return y ? new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'Undated'; };
+  function historyRow(e) {
+    const fuel = e.kind === 'fuel', money = n => n != null ? '$' + Number(n).toFixed(2) : '';
+    const title = fuel ? [money(e.total), e.gal != null ? e.gal + ' gal' : ''].filter(Boolean).join(' · ') : (e.services || 'Service');
+    const sub = fuel ? [e.odo ? fmt(e.odo) + ' mi' : '', e.mpg != null ? e.mpg.toFixed(1) + ' mpg' : '', e.type !== 'Full' ? e.type : ''].filter(Boolean).join(' · ')
+      : [e.odo ? fmt(e.odo) + ' mi' : '', e.cost != null ? money(e.cost) : 'No price', e.shop].filter(Boolean).join(' · ');
+    return '<button class="itembtn" data-entry="' + e.kind + ':' + e.row + '" style="align-items:center">' +
+      '<span class="well" style="width:36px;height:36px;border-radius:12px;background:var(--well);display:flex;align-items:center;justify-content:center;flex-shrink:0">' +
+        svg(fuel ? I.pump : I.wrench, { size: 18, stroke: fuel ? 'var(--amber)' : 'var(--blue)' }) + '</span>' +
+      '<span style="display:flex;flex-direction:column;gap:2px;min-width:0;flex:1"><span style="font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(title) + '</span>' +
+      '<span style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(sub) + (e.photos.length ? ' · photo' : '') + '</span></span>' +
+      '<span style="font-size:13px;color:var(--soft);white-space:nowrap">' + esc(shortDate(e.date)) + '</span></button>';
+  }
+  async function undoEdit(id) {
+    const home = await busy(null, '', () => api('undo', { id: id }));
+    if (home) { adopt(home); confirmBanner('Undone', 'Put back the way it was'); if (current === 'history' || current === 'entry') go('history'); else render(); }
+  }
+
   function rankName(i) { return i.status === 'Overdue' ? 0 : i.status === 'Due soon' ? 1 : 2; }
   function todoCount(v) {
     const t = state.data.todo || { tasks: [], shop: [] }, mine = x => !x.vehicle || x.vehicle === 'Both' || x.vehicle === v.name;
     const open = t.tasks.filter(x => mine(x) && !x.done).length, ask = t.shop.filter(x => mine(x) && x.active).length;
     return { open: open, ask: ask, label: [open ? open + ' open' : '', ask ? ask + ' to ask' : ''].filter(Boolean).join(' · ') || 'All done' };
+  }
+  /** To-do and History side by side at the bottom of Home. */
+  function quickRow(v) {
+    const c = todoCount(v);
+    const pill = (go, icon, color, label, extra) => '<button data-go="' + go + '" style="flex:1;min-width:0;height:42px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--soft);' +
+      'display:flex;align-items:center;justify-content:center;gap:8px;font-size:14px;font-weight:600">' + svg(icon, { size: 18, stroke: color }) + label +
+      (extra ? '<span style="color:' + color + ';font-weight:600;white-space:nowrap">' + extra + '</span>' : '') + '</button>';
+    return '<div class="row" style="gap:10px;margin-top:-4px">' + pill('todo', I.list, 'var(--blue)', 'To-do', c.open || c.ask ? '· ' + (c.open + c.ask) : '') +
+      pill('history', I.hist, 'var(--amber)', 'History', '') + '</div>';
   }
   function todoLine(v) {
     const c = todoCount(v);
@@ -902,30 +1000,33 @@
     scanFuel() {
       const s = state.scan;
       $app.querySelectorAll('[data-shot]').forEach(b => b.addEventListener('click', async () => {
-        try { const p = await GarageMedia.pickPhoto(); if (p) { s[b.dataset.shot] = p; render(); } } catch (err) { toast(err.message); }
+        try { const p = await GarageMedia.pickPhoto({ max: 2000, quality: 0.85 }); if (p) { s[b.dataset.shot] = p; render(); } } catch (err) { toast(err.message); }
       }));
       document.getElementById('readScan').addEventListener('click', async e => {
+        const pick = p => p ? (p.fileId ? { fileId: p.fileId } : bare(p)) : null;
         const r = await busy(e.currentTarget, state.data.settings.geminiReady ? 'Reading…' : 'Saving…',
-          () => api('scanFuel', { vehicle: vehicle().name, receipt: bare(s.receipt), dash: bare(s.dash) }));
+          () => api('scanFuel', { vehicle: vehicle().name, receipt: pick(s.receipt), dash: pick(s.dash) }));
         if (!r) return;
-        state.entry = { photoUrls: r.photoUrls, scanFileIds: r.scanFileIds };
+        if (r.ids) { if (s.receipt && r.ids.receipt) s.receipt.fileId = r.ids.receipt; if (s.dash && r.ids.dash) s.dash.fileId = r.ids.dash; }
+        state.entry = { photoUrls: r.photoUrls, scanFileIds: r.scanFileIds, fromScan: true };
         applyFuel(r.available ? r.fields : null, r.available ? 'Read from your ' + (s.dash ? 'receipt and dash' : 'receipt') + (s.dash ? '.' : '. Add the odometer.') : r.reason);
-        state.scan = null; go('manual');
+        go('manual');
       });
     },
     scanService() {
       const s = state.scan;
       $app.querySelectorAll('[data-shot]').forEach(b => b.addEventListener('click', async () => {
-        try { const p = await GarageMedia.pickPhoto(); if (p) { s.pages[Number(b.dataset.shot.slice(4))] = p; render(); } } catch (err) { toast(err.message); }
+        try { const p = await GarageMedia.pickPhoto({ files: true, max: 2400, quality: 0.85, enhance: true }); if (p) { s.pages[Number(b.dataset.shot.slice(4))] = p; render(); } } catch (err) { toast(err.message); }
       }));
       document.getElementById('readScan').addEventListener('click', async e => {
         const r = await busy(e.currentTarget, state.data.settings.geminiReady ? 'Reading…' : 'Saving…',
-          () => api('scanService', { vehicle: vehicle().name, pages: s.pages.map(bare) }));
+          () => api('scanService', { vehicle: vehicle().name, pages: s.pages.map(p => p.fileId ? { fileId: p.fileId } : bare(p)) }));
         if (!r) return;
         state.svc = null; applyService(r.available ? r.fields : null,
           r.available ? ((r.fields.jobs || []).length ? 'Read ' + r.fields.jobs.length + ' job' + (r.fields.jobs.length === 1 ? '' : 's') + ' from your invoice. Check the services, other work, and total.' : 'Couldn’t read the jobs on this invoice; add them below.') : r.reason);
-        state.svc.photoUrls = r.photoUrls; state.svc.scanFileIds = r.scanFileIds;
-        state.scan = null; go('serviceManual');
+        (r.pageIds || []).forEach((id, i) => { if (s.pages[i]) s.pages[i].fileId = id; });
+        state.svc.photoUrls = r.photoUrls; state.svc.scanFileIds = r.pageIds || r.scanFileIds; state.svc.fromScan = true;
+        go('serviceManual');
       });
     },
     talk() {
@@ -1120,6 +1221,58 @@
           state.newCar = null; state.review = null;
           confirmBanner(n.name + ' added', 'Reminders, tires, and prices set up'); go('home');
         }
+      });
+    },
+    async history() {
+      const v = vehicle();
+      $app.querySelectorAll('[data-hf]').forEach(b => b.addEventListener('click', () => { state.histFilter = b.dataset.hf; state.histLimit = 60; render(); }));
+      const more = document.getElementById('more');
+      if (more) more.addEventListener('click', () => { state.histLimit = (state.histLimit || 60) + 60; render(); });
+      $app.querySelectorAll('[data-entry]').forEach(b => b.addEventListener('click', () => {
+        const [kind, row] = b.dataset.entry.split(':'), e = state.hist[v.name].entries.find(x => x.kind === kind && String(x.row) === row);
+        const form = e.kind === 'fuel'
+          ? { date: e.date, odometer: e.odo != null ? String(e.odo) : '', gallons: e.gal != null ? String(e.gal) : '', total: e.total != null ? String(e.total) : '', fillType: e.type || 'Full', notes: e.notes }
+          : { date: e.date, odometer: e.odo != null ? String(e.odo) : '', services: e.services, cost: e.cost != null ? String(e.cost) : '', shop: e.shop, notes: e.notes };
+        state.histEdit = { entry: e, form: form, orig: JSON.stringify(form) };
+        go('entry');
+      }));
+      state.hist = state.hist || {};
+      if (state.hist[v.name]) return;
+      try {
+        state.hist[v.name] = await api('history', { vehicle: v.name });
+        if (current === 'history') render();
+      } catch (err) {
+        if (current === 'history') failBanner(err.message === 'Failed to fetch' ? 'History needs a connection.' : err.message, () => render());
+      }
+    },
+    entry() {
+      const x = state.histEdit, e = x.entry, f = x.form, fuel = e.kind === 'fuel';
+      const read = () => {
+        f.date = val('eDate') || f.date; f.odometer = val('eOdo'); f.notes = val('eNotes');
+        if (fuel) { f.gallons = val('eGal'); f.total = val('eTot');
+          const pp = document.getElementById('ePpg'); if (pp) pp.textContent = num(f.gallons) && num(f.total) != null ? '$' + (num(f.total) / num(f.gallons)).toFixed(3) + ' / gal' : ''; }
+        else { f.services = val('eSvc'); f.cost = val('eCost'); f.shop = val('eShop'); }
+      };
+      $app.querySelectorAll('input,textarea').forEach(i => i.addEventListener('input', read));
+      $app.querySelectorAll('[data-eft]').forEach(b => b.addEventListener('click', () => { read(); f.fillType = b.dataset.eft; render(); }));
+      const expect = { vehicle: vehicle().name, source: e.source, date: e.date, odo: e.odo };
+      document.getElementById('eSave').addEventListener('click', async ev => {
+        read();
+        if (x.orig === JSON.stringify(f)) { toast('Nothing changed.'); return; }
+        if (!num(f.odometer)) { toast('Add the odometer reading.'); return; }
+        if (fuel && (!num(f.gallons) || num(f.total) == null)) { toast('Gallons and total are both needed.'); return; }
+        if (!fuel && !String(f.services).trim()) { toast('List the work done.'); return; }
+        const id = newId();
+        const fields = fuel ? { date: f.date, odometer: num(f.odometer), gallons: num(f.gallons), total: num(f.total), fillType: f.fillType, notes: f.notes }
+          : { date: f.date, odometer: num(f.odometer), services: f.services, cost: f.cost === '' ? '' : num(f.cost), shop: f.shop, notes: f.notes };
+        const home = await busy(ev.currentTarget, 'Saving…', () => api('editEntry', { kind: e.kind, row: e.row, expect: expect, fields: fields, clientId: id }));
+        if (home) { adopt(home); state.histEdit = null; confirmBanner(fuel ? 'Fill-up updated' : 'Visit updated', fuel ? 'MPG recalculated' : 'Reminders kept in step', { label: 'Undo', fn: () => undoEdit(id) }); go('history'); }
+      });
+      document.getElementById('eDel').addEventListener('click', async ev => {
+        if (!window.confirm('Delete this ' + (fuel ? 'fill-up' : 'service visit') + ' from ' + longDate(e.date) + '? You can undo it right after. Its photos stay in your Garage Log.')) return;
+        const id = newId();
+        const home = await busy(ev.currentTarget, 'Deleting…', () => api('deleteEntry', { kind: e.kind, row: e.row, expect: expect, clientId: id }));
+        if (home) { adopt(home); state.histEdit = null; confirmBanner(fuel ? 'Fill-up deleted' : 'Visit deleted', fuel ? 'MPG recalculated' : 'Reminders kept in step', { label: 'Undo', fn: () => undoEdit(id) }); go('history'); }
       });
     },
     error() { document.getElementById('retry').addEventListener('click', () => load()); }

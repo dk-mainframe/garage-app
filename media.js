@@ -2,24 +2,40 @@
 (function (root) {
   'use strict';
 
-  /** Opens the camera (or photo library) and returns a resized JPEG: { mime, data (base64), preview (data URL) }. */
-  function pickPhoto() {
+  /**
+   * Opens the camera, or (with opts.files) the iPhone menu: Take Photo, Photo Library, or Choose File, which accepts PDFs.
+   * Photos come back as a resized JPEG: { mime, data (base64), preview (data URL) }. PDFs as { mime, data, name, size }.
+   * opts: { files, max (longest side, px), quality, enhance (gentle contrast lift for dim paper) }
+   */
+  function pickPhoto(opts) {
+    const o = Object.assign({ files: false, max: 1600, quality: 0.8, enhance: false }, opts || {});
     return new Promise((resolve, reject) => {
       const input = document.createElement('input');
-      input.type = 'file'; input.accept = 'image/*'; input.setAttribute('capture', 'environment');
+      input.type = 'file'; input.accept = o.files ? 'image/*,application/pdf' : 'image/*';
+      if (!o.files) input.setAttribute('capture', 'environment');
       input.style.display = 'none';
       input.addEventListener('change', () => {
         const file = input.files && input.files[0];
         input.remove();
         if (!file) { resolve(null); return; }
+        if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+          if (file.size > 15 * 1024 * 1024) { reject(new Error('That PDF is over 15 MB. Try a smaller scan.')); return; }
+          const fr = new FileReader();
+          fr.onload = () => resolve({ mime: 'application/pdf', data: String(fr.result).split(',')[1], name: file.name, size: file.size });
+          fr.onerror = () => reject(new Error('Couldn’t read that PDF. Try again.'));
+          fr.readAsDataURL(file);
+          return;
+        }
         const img = new Image(), url = URL.createObjectURL(file);
         img.onload = () => {
-          const max = 1600, s = Math.min(1, max / Math.max(img.width, img.height));
+          const s = Math.min(1, o.max / Math.max(img.width, img.height));
           const c = document.createElement('canvas');
           c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
-          c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+          const ctx = c.getContext('2d');
+          ctx.drawImage(img, 0, 0, c.width, c.height);
           URL.revokeObjectURL(url);
-          const dataUrl = c.toDataURL('image/jpeg', 0.8);
+          if (o.enhance) enhance(ctx, c.width, c.height);
+          const dataUrl = c.toDataURL('image/jpeg', o.quality);
           resolve({ mime: 'image/jpeg', data: dataUrl.split(',')[1], preview: dataUrl });
         };
         img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Couldn’t read that photo. Try again.')); };
@@ -28,6 +44,20 @@
       document.body.appendChild(input);
       input.click();
     });
+  }
+  /** Stretches brightness so dim, gray paper reads as white with dark text. Leaves already-crisp photos alone. */
+  function enhance(ctx, w, h) {
+    const im = ctx.getImageData(0, 0, w, h), d = im.data, hist = new Uint32Array(256);
+    for (let i = 0; i < d.length; i += 16) hist[(d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) >> 8]++;
+    const total = hist.reduce((a, b) => a + b, 0);
+    let lo = 0, hi = 255, acc = 0;
+    for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc > total * 0.01) { lo = v; break; } }
+    acc = 0;
+    for (let v = 255; v >= 0; v--) { acc += hist[v]; if (acc > total * 0.02) { hi = v; break; } }
+    if (hi - lo < 40 || (lo < 12 && hi > 243)) return;
+    const k = 255 / (hi - lo);
+    for (let i = 0; i < d.length; i += 4) for (let j = 0; j < 3; j++) { const v = (d[i + j] - lo) * k; d[i + j] = v < 0 ? 0 : v > 255 ? 255 : v; }
+    ctx.putImageData(im, 0, 0);
   }
 
   /**
