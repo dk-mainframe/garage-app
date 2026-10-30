@@ -13,17 +13,33 @@
    * v: the vehicle from the Home data. e: { odometer, gallons, total, price (optional), fillType }.
    * Returns a list of { field, title, text }. Empty list = looks fine.
    */
-  function runChecks(v, e) {
+  /** Short name for messages: "2018 F-150" -> "F-150", "2023 Camry Blue" -> "Camry". */
+  function nick(name) { return String(name).replace(/^\d{4}\s+/, '').split(/\s+/)[0] || name; }
+  /** Another vehicle whose odometer this reading fits (a little past its last reading), if any. */
+  function fitsOther(others, odo) {
+    return (others || []).find(o => {
+      const l = o.lastFillOdo || o.odometer || 0, reach = (o.milesPerTank || 600) * 1.5;
+      return l && odo >= l && odo - l <= reach;
+    });
+  }
+
+  function runChecks(v, e, others) {
     const out = [];
     const last = v.lastFillOdo || v.odometer || 0;
+    const here = nick(v.name);
 
-    // 1. Odometer going backward, or a jump of more than about 1.5 tanks.
+    // 1. Odometer going backward, or a jump of more than about 1.5 tanks. Says which vehicle is selected,
+    //    and if the reading fits another vehicle, suggests switching to it.
+    const other = (e.odometer <= last || (v.milesPerTank && e.odometer - last > v.milesPerTank * 1.5)) ? fitsOther(others, e.odometer) : null;
+    const hint = other ? ' It’s right after the ' + nick(other.name) + '’s last reading of ' + fmt(other.lastFillOdo || other.odometer) + '. Did you mean the ' + nick(other.name) + '?' : '';
     if (e.odometer <= last) {
-      out.push({ field: 'odometer', title: 'Odometer looks off',
-        text: fmt(e.odometer) + ' is ' + (e.odometer < last ? 'lower than' : 'the same as') + ' your last reading of ' + fmt(last) + '. A digit may have been missed.' });
+      out.push({ field: 'odometer', title: 'This is logged to the ' + here, switchTo: other ? other.name : null,
+        text: fmt(e.odometer) + ' is ' + (e.odometer < last ? 'lower than' : 'the same as') + ' the ' + here + '’s last reading of ' + fmt(last) + '.' +
+          (hint || ' A digit may have been missed.') });
     } else if (v.milesPerTank && e.fillType !== 'Missed' && e.odometer - last > v.milesPerTank * 1.5) {
-      out.push({ field: 'odometer', title: 'Big jump since your last fill-up',
-        text: fmt(e.odometer - last) + ' miles is more than a tank and a half. If you skipped logging a fill-up, choose “Missed one.”' });
+      out.push({ field: 'odometer', title: other ? 'This is logged to the ' + here : 'Big jump since your last fill-up', switchTo: other ? other.name : null,
+        text: fmt(e.odometer - last) + ' miles since the ' + here + '’s last fill-up is more than a tank and a half.' +
+          (hint || ' If you skipped logging a fill-up, choose “Missed one.”') });
     }
 
     // 2. More gallons than the tank holds.

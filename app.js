@@ -424,7 +424,8 @@
       const v = vehicle(), e = state.entry || {}, bad = f => state.warnings.some(w => w.field === f) ? ' bad' : '';
       return '<div class="screen">' + header(e.fromScan && state.scan ? 'scanFuel' : 'fuel', v) + '<h1 style="padding:0 4px">' + (e.fromAI ? 'Look right?' : 'Enter fill-up') + '</h1>' +
         (e.fromAI ? '<div class="note">' + esc(e.fromAI) + '</div>' : '') +
-        state.warnings.map(w => '<div class="warn">' + svg(I.alert, { stroke: 'var(--red)', w: 2 }) + '<div><b>' + esc(w.title) + '</b><span>' + esc(w.text) + '</span></div></div>').join('') +
+        state.warnings.map(w => '<div class="warn">' + svg(I.alert, { stroke: 'var(--red)', w: 2 }) + '<div><b>' + esc(w.title) + '</b><span>' + esc(w.text) + '</span>' +
+          (w.switchTo ? '<button class="mini" data-switch="' + esc(w.switchTo) + '" style="margin-top:10px;color:var(--amber);border-color:var(--amber)">Switch to the ' + esc(shortName(w.switchTo)) + '</button>' : '') + '</div></div>').join('') +
         '<div class="field"><label for="odo">Odometer</label><input id="odo" class="' + bad('odometer') + '" inputmode="numeric" placeholder="Last: ' + fmt(v.lastFillOdo || v.odometer || 0) + '" value="' + esc(e.odometer != null ? e.odometer : '') + '"></div>' +
         '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">' +
           '<div class="field"><label for="gal">Gallons</label><input id="gal" class="' + bad('gallons') + '" inputmode="decimal" placeholder="0.000" value="' + esc(e.gallons != null ? e.gallons : '') + '"></div>' +
@@ -1111,10 +1112,16 @@
       document.getElementById('save').addEventListener('click', () => {
         const e = read();
         if (!e.odometer || !e.gallons || e.total == null) { toast('Odometer, gallons, and total are all needed.'); return; }
-        state.warnings = GarageChecks.runChecks(vehicle(), e);
+        state.warnings = GarageChecks.runChecks(vehicle(), e, state.data.vehicles.filter(x => x.name !== vehicle().name));
         if (state.warnings.length) { render(); return; }
         saveFuel();
       });
+      $app.querySelectorAll('[data-switch]').forEach(b => b.addEventListener('click', () => {
+        const e = read();
+        state.vehicle = b.dataset.switch; store.set('vehicle', state.vehicle);
+        state.warnings = GarageChecks.runChecks(vehicle(), e, state.data.vehicles.filter(x => x.name !== vehicle().name));
+        render(); confirmBanner('Switched to the ' + shortName(state.vehicle), 'Your numbers are kept. Check them, then save.');
+      }));
       const anyway = document.getElementById('anyway');
       if (anyway) anyway.addEventListener('click', () => { read(); saveFuel(); });
     },
