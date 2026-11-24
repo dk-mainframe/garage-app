@@ -288,7 +288,10 @@
       const d = state.data, v = vehicle();
       const digits = String(Math.round(v.odometer || 0)).padStart(6, '0').split('');
       const oil = v.oil, ringColor = !oil ? 'var(--line)' : oil.status === 'Overdue' ? 'var(--red)' : oil.status === 'Due soon' ? 'var(--amber)' : 'var(--blue)';
-      const top = v.attention.filter(i => i.status !== 'Needs baseline').slice(0, 4);
+      // Open to-dos for this car come first, then the most urgent services, four lines in all.
+      const todos = ((state.data.todo || {}).tasks || []).filter(x => !x.done && x.task && (!x.vehicle || x.vehicle === 'Both' || x.vehicle === v.name));
+      const shownTodos = todos.filter(x => x.vehicle === v.name).concat(todos.filter(x => x.vehicle !== v.name)).slice(0, 2); // this car's own first
+      const top = v.attention.filter(i => i.status !== 'Needs baseline').slice(0, 4 - shownTodos.length);
       return '<div class="screen">' +
         '<div class="between"><span class="eyebrow" style="padding-left:4px;display:flex;align-items:center;gap:10px">Garage' +
           (state.refreshing ? '<span class="updating" role="status">Updating…</span>' : '') + '</span>' +
@@ -309,7 +312,10 @@
           '<div class="row" style="gap:16px">' + ring(oil, ringColor) +
           '<div class="grow" style="display:flex;flex-direction:column;gap:8px;min-width:0"><div class="between"><span style="font-size:14px;font-weight:600">Needs attention</span>' +
           (v.overdue ? '<span class="pill" style="background:var(--red);color:#000">' + v.overdue + '</span>' : '') + '</div>' +
+          shownTodos.map(t => '<button class="line" data-go="todo" style="all:unset;display:flex;justify-content:space-between;gap:8px;font-size:13px;cursor:pointer">' +
+            '<span style="color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">' + esc(t.task) + '</span><span style="color:var(--blue);font-weight:600;white-space:nowrap">To-do</span></button>').join('') +
           (top.length ? top.map(i => '<div class="line"><span>' + esc(i.service) + '</span><span class="' + (i.status === 'Overdue' ? 'over' : 'soon') + '">' + esc(i.label) + '</span></div>').join('')
+            : shownTodos.length ? ''
             : v.attention.length
               ? '<div class="line"><span>' + v.attention.length + ' service' + (v.attention.length === 1 ? ' needs' : 's need') + ' info</span><span class="soon">Add in See all</span></div>'
               : '<div class="line"><span>All caught up</span><span></span></div>') + '</div></div>' +
